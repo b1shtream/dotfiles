@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Toggle redshift (blue-light filter) on/off. Bound to $mod+Shift+b in i3.
+if pgrep -x redshift >/dev/null; then
+    pkill -x redshift
+    redshift -x                                   # reset screen to normal colors
+    notify-send -t 1500 "Redshift" " Night light OFF"
+else
+    redshift >/dev/null 2>&1 &                     # restart daemon (re-applies config)
+    notify-send -t 1500 "Redshift" " Night light ON"
+fi
