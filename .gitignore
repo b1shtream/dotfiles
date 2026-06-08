@@ -1,0 +1,23 @@
+# Never track backups, caches, or secrets
+*.bak
+*.bak.*
+*~
+.dotfiles-backup/
+
+# Defensive: never commit anything that could hold secrets/private data,
+# even if accidentally copied into the repo tree.
+**/google-chrome/
+**/chromium/
+**/mozilla/
+**/pulse/
+**/dconf/
+**/copyq/
+**/yay/
+**/*token*
+**/*secret*
+**/*.key
+**/*.pem
+**/id_rsa*
+**/id_ed25519*
+**/.netrc
+**/*api*key*
