@@ -191,7 +191,9 @@ bindsym $mod+Shift+e exec --no-startup-id ~/.config/i3/scripts/powermenu
 # lock by blurring the screen (moved off $mod+l so l can be vim focus-right):
 bindsym $mod+Escape exec --no-startup-id ~/.config/i3/scripts/blur-lock
 # lock in case after sleep
-exec --no-startup-id xss-lock -l ~/.config/i3/scripts/blur-lock
+# Disabled: xss-lock hooks the X screensaver, so the 8-min idle timeout below
+# used to fire blur-lock and demand a password. Manual lock is $mod+Escape.
+#exec --no-startup-id xss-lock -l ~/.config/i3/scripts/blur-lock
 
 # reload the configuration file
 bindsym $mod+Shift+c reload
@@ -320,12 +322,14 @@ bindsym $mod+c exec --no-startup-id copyq menu
 bindsym $mod+Shift+b exec --no-startup-id ~/.config/i3/scripts/redshift-toggle
 
 # Screenshot (flameshot)
-# interactive: select a region, annotate, then save/copy
-bindsym Print exec --no-startup-id flameshot gui -p ~/Pictures
-# the currently focused screen, saved straight to ~/Pictures
+# interactive: select a region, annotate, then it is auto-copied to the
+# clipboard (-c) AND saved to ~/Pictures (-p). Paste anywhere with Ctrl+V.
+# Ctrl+C inside the overlay still works too.
+bindsym Print exec --no-startup-id flameshot gui -c -p ~/Pictures
+# the currently focused screen, copied to clipboard and saved to ~/Pictures
 bindsym $mod+Print exec --no-startup-id flameshot full -c -p ~/Pictures
 # select a region with the mouse (same as plain Print here, kept for muscle memory)
-bindsym $mod+Shift+Print exec --no-startup-id flameshot gui -p ~/Pictures
+bindsym $mod+Shift+Print exec --no-startup-id flameshot gui -c -p ~/Pictures
 
 # Power Profiles menu switcher (rofi)
 bindsym $mod+Shift+p exec --no-startup-id ~/.config/i3/scripts/power-profiles
@@ -451,6 +455,19 @@ exec --no-startup-id dex --autostart --environment i3
 # start conky:
 #exec_always --no-startup-id conky
 
+# ambient "today" widget (bottom-right): Laptop/Phone/Tokens from the shared dashboard.
+# conky runs as a 'normal' window (class ConkyAmbient) so i3 manages it: float on top, no border,
+# sticky on every workspace, never steal focus. (override-redirect ignored stacking and stayed hidden
+# behind tiled windows; a managed floating window is reliably visible on i3.)
+# resize+move force the geometry: i3 otherwise floats conky at its tiny initial size (75x50, centered)
+# because it grabs the window before conky finishes sizing. 300x230 at 1604,798 = bottom-right (1920x1080).
+for_window [class="ConkyAmbient"] floating enable, border none, sticky enable, move position 1522 818
+no_focus [class="ConkyAmbient"]
+# Launch via a systemd USER SERVICE, not a direct `exec conky`: i3-exec'd conky processes get killed
+# within seconds (session cleanup), but a systemd-owned process persists and auto-restarts. The
+# `systemctl restart` command is short-lived (i3 exec'ing it is fine); systemd owns the conky process.
+exec_always --no-startup-id systemctl --user restart conky-ambient.service
+
 # start a script to setup displays
 # uncomment the next line, use arandr to setup displays and save the file as monitor:
 # (disabled: ~/.screenlayout/monitor.sh does not exist on this single-display laptop)
@@ -461,7 +478,9 @@ exec --no-startup-id dex --autostart --environment i3
 exec --no-startup-id sleep 1 && feh --bg-fill /usr/share/endeavouros/backgrounds/endeavouros-wallpaper.png
 
 # set powersavings for display:
-exec --no-startup-id xset s 480 dpms 600 600 600
+# Disabled: never blank, never DPMS-off, never fire the screensaver.
+# ("s off" kills the 8-min screensaver trigger, "-dpms" kills monitor power-off.)
+exec --no-startup-id xset s off -dpms
 
 # faster keyboard repeat: 250ms delay before repeat, then 40 chars/sec
 exec --no-startup-id xset r rate 250 40
@@ -629,3 +648,8 @@ bindsym $mod+t exec --no-startup-id rofi -show window \
 #exec --no-startup-id greenclip daemon>/dev/null
 #bindsym $mod+c exec --no-startup-id rofi -modi "clipboard:greenclip print" -show clipboard \
 #       -config ~/.config/rofi/rofidmenu.rasi
+
+# --- Whisper dictation: HOLD Super+m to dictate live, release to stop ---
+exec_always --no-startup-id /home/trinity/.local/bin/whisper-dictate-micfix
+bindsym $mod+m exec --no-startup-id /home/trinity/.local/bin/whisper-dictate start
+bindsym --release $mod+m exec --no-startup-id /home/trinity/.local/bin/whisper-dictate stop

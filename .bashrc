@@ -68,6 +68,86 @@ export FZF_CTRL_T_OPTS="--preview 'bat --color=always --style=numbers --line-ran
 eval "$(zoxide init bash)"
 
 # ---------------------------------------------------------------------------
+# claude — always run inside tmux, so a session survives a dropped ssh/phone
+# connection. Default session per project directory: claude-<dirname>.
+#
+# A *detached* session means a connection dropped -> reattach to it.
+# An *attached* session means it is already in use -> start claude-<dirname>-2
+# instead, so two terminals never end up driving the same Claude.
+#
+# Force a brand-new session with:  CLAUDE_TMUX_NEW=1 claude
+# Reattach with `cattach` (lists candidates when several exist).
+# ---------------------------------------------------------------------------
+claude() {
+  # Pass straight through when tmux would be wrong or impossible:
+  #   $TMUX set      -> already inside tmux; nesting would be confusing
+  #   stdout not tty -> being piped/captured by a script
+  if [[ -n "$TMUX" || ! -t 1 ]]; then
+    command claude "$@"
+    return
+  fi
+
+  # Headless/one-shot invocations must not be wrapped: their output is the
+  # point, and tmux would eat it. -p/--print is Claude's non-interactive mode.
+  local a
+  for a in "$@"; do
+    case "$a" in
+      -p|--print|--version|-h|--help|--output-format|update|doctor|mcp|install)
+        command claude "$@"
+        return
+        ;;
+    esac
+  done
+
+  # Session name from the current directory, sanitised: tmux treats "." and ":"
+  # as target separators, so they cannot appear in a session name.
+  local base
+  base="claude-$(basename "$PWD" | tr -c '[:alnum:]_-' '-' | sed 's/-*$//')"
+
+  # Reattach only to an *unattached* session — the dropped-connection case this
+  # wrapper exists for. "=" forces an exact tmux name match, so claude-foo does
+  # not prefix-match claude-foo-2.
+  if [[ -z "$CLAUDE_TMUX_NEW" ]] \
+     && tmux has-session -t "=$base" 2>/dev/null \
+     && [[ "$(tmux display-message -p -t "=$base" '#{session_attached}' 2>/dev/null)" == 0 ]]; then
+    tmux attach -t "=$base"
+    return
+  fi
+
+  # Otherwise take the first free name: claude-foo, claude-foo-2, claude-foo-3…
+  local name="$base" n=2
+  while tmux has-session -t "=$name" 2>/dev/null; do
+    name="$base-$n"
+    ((n++))
+  done
+
+  # Build a properly quoted command so paths with spaces survive.
+  local cmd
+  printf -v cmd '%q ' "$(command -v claude)" "$@"
+
+  tmux new-session -s "$name" -c "$PWD" "$cmd" \
+    || { echo "tmux failed; running claude directly" >&2; command claude "$@"; }
+}
+
+# Reattach to a claude session. With an arg, attach to that one. With none,
+# attach to this directory's session, or list the candidates if several exist.
+cattach() {
+  if [[ -n "$1" ]]; then tmux attach -t "=$1"; return; fi
+  local base
+  base="claude-$(basename "$PWD" | tr -c '[:alnum:]_-' '-' | sed 's/-*$//')"
+  local -a found
+  mapfile -t found < <(tmux list-sessions -F '#{session_name}' 2>/dev/null \
+                        | grep -E "^${base}(-[0-9]+)?$")
+  case ${#found[@]} in
+    0) echo "no claude session for $PWD — start one with: claude" >&2; return 1 ;;
+    1) tmux attach -t "=${found[0]}" ;;
+    *) printf 'multiple claude sessions here:\n'
+       printf '  %s\n' "${found[@]}"
+       printf 'attach with: cattach <name>\n' ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
 # Prompt — clean two-tone with git branch
 # ---------------------------------------------------------------------------
 __git_branch() {
